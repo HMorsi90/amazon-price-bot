@@ -3,12 +3,12 @@ import time
 import os
 import re
 import json
+import asyncio
 from bs4 import BeautifulSoup
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 TOKEN = os.getenv("BOT_TOKEN")
-
 DATA_FILE = "data.json"
 
 def load_data():
@@ -22,9 +22,7 @@ def save_data(data):
         json.dump(data, f)
 
 def get_price(url):
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    headers = {"User-Agent": "Mozilla/5.0"}
     r = requests.get(url, headers=headers)
     soup = BeautifulSoup(r.text, "html.parser")
 
@@ -59,39 +57,32 @@ async def add_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     data[chat_id].append({
         "url": url,
-        "price": price,
-        "interval": 600,
-        "last_check": 0
+        "price": price
     })
 
     save_data(data)
-
     await update.message.reply_text(f"تمت الإضافة\nالسعر الحالي: {price} جنيه")
 
 async def check_prices(app):
     while True:
         data = load_data()
-        now = time.time()
 
         for chat_id in data:
             for item in data[chat_id]:
-                if now - item["last_check"] > item["interval"]:
-                    new_price = get_price(item["url"])
+                new_price = get_price(item["url"])
 
-                    if new_price and new_price < item["price"]:
-                        await app.bot.send_message(
-                            chat_id=int(chat_id),
-                            text=f"""📉 السعر انخفض
+                if new_price and new_price < item["price"]:
+                    await app.bot.send_message(
+                        chat_id=int(chat_id),
+                        text=f"""📉 السعر انخفض
 💰 كان: {item['price']} جنيه
 🔥 أصبح: {new_price} جنيه
 🔗 {item['url']}"""
-                        )
-                        item["price"] = new_price
-
-                    item["last_check"] = now
+                    )
+                    item["price"] = new_price
 
         save_data(data)
-        await asyncio.sleep(60)
+        await asyncio.sleep(600)
 
 async def main():
     app = ApplicationBuilder().token(TOKEN).build()
@@ -99,10 +90,9 @@ async def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, add_product))
 
-    app.job_queue.run_once(lambda *_: app.create_task(check_prices(app)), 1)
+    asyncio.create_task(check_prices(app))
 
     await app.run_polling()
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
