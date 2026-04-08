@@ -91,7 +91,7 @@ async def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, add_product))
 
-    application.job_queue.run_once(lambda *_: asyncio.create_task(check_prices(application)), 1)
+    asyncio.create_task(check_prices(application))
 
     await application.run_polling()
 
